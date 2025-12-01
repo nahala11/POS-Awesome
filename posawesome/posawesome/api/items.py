@@ -547,6 +547,7 @@ def _shape_item_row(
     item: Dict[str, Any],
     detail: Dict[str, Any],
     plan: SearchPlan,
+    pos_profile: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Merge item and detail data while respecting stock and template settings."""
 
@@ -571,7 +572,10 @@ def _shape_item_row(
         and (not detail.get("actual_qty") or detail.get("actual_qty") < 0)
         and not item.get("has_variants")
     ):
-        return None
+        # Check if we should allow sales without stock check
+        # If posa_allow_sales_without_stock_check is enabled in POS Profile, show items even with 0 stock
+        if not pos_profile or not pos_profile.get("posa_allow_sales_without_stock_check"):
+            return None
 
     row: Dict[str, Any] = {}
     row.update(item)
@@ -630,7 +634,7 @@ def _run_item_query(
 
         for item in items_data:
             detail = detail_map.get(item.get("item_code"), {})
-            row = _shape_item_row(dict(item), detail, plan)
+            row = _shape_item_row(dict(item), detail, plan, pos_profile)
             if not row:
                 continue
             if not _matches_search_words(row, plan.search_words, plan.word_filter_active):

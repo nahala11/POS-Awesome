@@ -123,8 +123,9 @@ export function useItemAddition() {
 	// Add item to invoice
 	const addItem = withPerf("pos:add-item", async function addItemMeasured(item, context) {
 		const blockSale = context.pos_profile?.posa_block_sale_beyond_available_qty;
+		const allowSalesWithoutStock = context.pos_profile?.posa_allow_sales_without_stock_check;
 
-		if (blockSale && item.is_stock_item && item.actual_qty <= 0) {
+		if (blockSale && item.is_stock_item && item.actual_qty <= 0 && !allowSalesWithoutStock) {
 			context.eventBus.emit("show_message", {
 				title: __("Item is out of stock"),
 				text: __("Cannot add an item with zero or negative quantity."),
@@ -133,7 +134,7 @@ export function useItemAddition() {
 			return;
 		}
 
-		if (blockSale) {
+		if (blockSale && !allowSalesWithoutStock) {
 			const existingItem = context.items.find(
 				(i) => i.item_code === item.item_code && i.uom === item.uom,
 			);

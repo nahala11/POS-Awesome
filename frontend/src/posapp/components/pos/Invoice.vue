@@ -29,16 +29,16 @@
 				</v-alert>
 				<!-- Top Row: Customer Selection and Invoice Type -->
 				<v-row align="center" class="items px-3 py-2">
-					<v-col :cols="pos_profile.posa_allow_sales_order ? 9 : 12" class="pb-0 pr-0">
+					<v-col :cols="pos_profile.posa_allow_sales_order ? 8 : 12" class="pb-0 pr-2">
 						<!-- Customer selection component -->
 						<Customer ref="customerComponent" />
 					</v-col>
 					<!-- Invoice Type Selection (Only shown if sales orders are allowed) -->
-					<v-col v-if="pos_profile.posa_allow_sales_order" cols="3" class="pb-4">
+					<v-col v-if="pos_profile.posa_allow_sales_order" cols="4" class="pb-0 pl-1">
 						<v-select
 							density="compact"
 							hide-details
-							variant="solo"
+							variant="outlined"
 							color="primary"
 							class="sleek-field pos-themed-input"
 							:items="invoiceTypes"
@@ -526,17 +526,9 @@ export default {
 
 			// Initialize selected columns if empty
 			if (!this.selected_columns || this.selected_columns.length === 0) {
-				// By default, select all required columns and those enabled in POS profile
+				// By default, only show required columns (all optional features toggled OFF)
 				this.selected_columns = this.available_columns
-					.filter((col) => {
-						if (col.required) return true;
-						if (col.key === "price_list_rate") return true;
-						if (col.key === "discount_value" && this.pos_profile.posa_display_discount_percentage)
-							return true;
-						if (col.key === "discount_amount" && this.pos_profile.posa_display_discount_amount)
-							return true;
-						return false;
-					})
+					.filter((col) => col.required)
 					.map((col) => col.key);
 			}
 
@@ -1089,6 +1081,21 @@ export default {
 			// Parse and set the value using the mixin's formatter
 			let parsedValue = this.setFormatedFloat(item, field_name, precision, no_negative, value);
 
+			// Check if POS allows sales without stock validation
+			const allowSalesWithoutStock = this.pos_profile.posa_allow_sales_without_stock_check;
+			if (allowSalesWithoutStock) {
+				// Skip stock validation if the setting is enabled
+				if (this.isReturnInvoice && parsedValue > 0) {
+					parsedValue = -Math.abs(parsedValue);
+					item[field_name] = parsedValue;
+				}
+				this.calc_stock_qty(item, item[field_name]);
+				if (field_name === "qty") {
+					this.updateBundleChildrenQty(item);
+				}
+				return parsedValue;
+			}
+
 			const enforceStockLimits = this.shouldEnforceStockLimits(item);
 			// Enforce available stock limits
 			if (
@@ -1518,6 +1525,23 @@ export default {
 
 		// Increase quantity of an item (handles return logic)
 		add_one(item) {
+			// Check if POS allows sales without stock validation
+			const allowSalesWithoutStock = this.pos_profile.posa_allow_sales_without_stock_check;
+			if (allowSalesWithoutStock) {
+				if (this.isReturnInvoice) {
+					item.qty--;
+				} else {
+					item.qty++;
+				}
+				if (item.qty === 0) {
+					this.remove_item(item);
+				}
+				this.calc_stock_qty(item, item.qty);
+				this.updateBundleChildrenQty(item);
+				this.$forceUpdate();
+				return;
+			}
+
 			const enforceStockLimits = this.shouldEnforceStockLimits(item);
 			if (this.isReturnInvoice) {
 				// For returns, make quantity more negative
@@ -1797,6 +1821,20 @@ export default {
 				}
 			},
 		);
+		// Watch discount values and emit to ItemsSelector
+		this.$watch(
+			() => [this.additional_discount, this.total_items_discount_amount],
+			([newDiscount, newItemsDiscount]) => {
+				this.eventBus.emit("update_discounts", {
+					additional_discount: newDiscount,
+					total_items_discount: newItemsDiscount,
+				});
+			},
+		);
+		// Listen for discount updates from ItemsSelector
+		this.eventBus.on("update_additional_discount_from_items", (value) => {
+			this.additional_discount = value;
+		});
 		this._shortcutHandlers = this._shortcutHandlers || {};
 
 		this._shortcutHandlers.shortOpenPayment = this.shortOpenPayment.bind(this);

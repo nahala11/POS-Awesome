@@ -296,6 +296,7 @@ fixtures = [
                     "POS Profile-posa_enable_camera_scanning",
                     "POS Profile-posa_camera_scan_type",
                     "POS Profile-posa_language",
+                    "POS Profile-posa_allow_sales_without_stock_check",
                 ),
             ]
         ],

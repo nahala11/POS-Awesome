@@ -54,17 +54,25 @@ export function useCartValidation() {
 			}
 
 			// Step 3: Zero stock validation (if enabled)
-			if (item.actual_qty === 0 && posProfile?.posa_display_items_in_stock) {
-				if (eventBus) {
-					eventBus.emit("show_message", {
-						title: `No stock available for ${item.item_name}`,
-						color: "error",
-					});
+			// Skip if POS Profile allows sales without stock check
+			if (!posProfile?.posa_allow_sales_without_stock_check) {
+				if (item.actual_qty === 0 && posProfile?.posa_display_items_in_stock) {
+					if (eventBus) {
+						eventBus.emit("show_message", {
+							title: `No stock available for ${item.item_name}`,
+							color: "error",
+						});
+					}
+					return false;
 				}
-				return false;
 			}
 
 			const isStockItem = parseBooleanSetting(item?.is_stock_item);
+
+			// Skip all stock validation if POS Profile allows sales without stock check
+			if (posProfile?.posa_allow_sales_without_stock_check) {
+				return true;
+			}
 
 			if (isStockItem) {
 				// Step 4: Client-side quantity validation (before server call)
@@ -195,6 +203,11 @@ export function useCartValidation() {
 		console.warn("Using fallback validation due to server validation failure");
 
 		const isStockItem = parseBooleanSetting(item?.is_stock_item);
+
+		// Skip stock validation if POS Profile allows sales without stock check
+		if (posProfile?.posa_allow_sales_without_stock_check) {
+			return true;
+		}
 
 		if (isStockItem) {
 			// Allow negative stock items when Allow Negative Stock is enabled

@@ -13,28 +13,63 @@
 		<Variants></Variants>
 		<OpeningDialog v-if="dialog" :dialog="dialog"></OpeningDialog>
 		<v-row v-show="!dialog" dense class="ma-0 dynamic-main-row">
+			<!-- Collapsible Item Groups Sidebar -->
+			<v-navigation-drawer
+				v-model="itemGroupsDrawer"
+				:width="itemGroupsDrawerWidth"
+				location="left"
+				temporary
+				class="item-groups-sidebar"
+			>
+				<v-list density="compact" class="pa-0">
+					<v-list-item class="sidebar-header">
+						<v-list-item-title class="text-h6 font-weight-bold">{{
+							__("Item Groups")
+						}}</v-list-item-title>
+						<template v-slot:append>
+							<v-btn
+								icon="mdi-close"
+								variant="text"
+								size="small"
+								@click="itemGroupsDrawer = false"
+							></v-btn>
+						</template>
+					</v-list-item>
+					<v-divider></v-divider>
+					<v-list-item
+						v-for="group in itemGroups"
+						:key="group"
+						@click="selectItemGroup(group)"
+						:active="selectedItemGroup === group"
+						class="group-item"
+					>
+						<v-list-item-title>{{ group }}</v-list-item-title>
+					</v-list-item>
+				</v-list>
+			</v-navigation-drawer>
+
 			<v-col
 				v-show="!payment && !showOffers && !coupons"
-				xl="5"
-				lg="5"
-				md="5"
-				sm="5"
+				xl="7"
+				lg="7"
+				md="7"
+				sm="12"
 				cols="12"
 				class="pos dynamic-col"
 			>
 				<ItemsSelector></ItemsSelector>
 			</v-col>
-			<v-col v-show="showOffers" xl="5" lg="5" md="5" sm="5" cols="12" class="pos dynamic-col">
+			<v-col v-show="showOffers" xl="7" lg="7" md="7" sm="12" cols="12" class="pos dynamic-col">
 				<PosOffers></PosOffers>
 			</v-col>
-			<v-col v-show="coupons" xl="5" lg="5" md="5" sm="5" cols="12" class="pos dynamic-col">
+			<v-col v-show="coupons" xl="7" lg="7" md="7" sm="12" cols="12" class="pos dynamic-col">
 				<PosCoupons></PosCoupons>
 			</v-col>
-			<v-col v-show="payment" xl="5" lg="5" md="5" sm="5" cols="12" class="pos dynamic-col">
+			<v-col v-show="payment" xl="7" lg="7" md="7" sm="12" cols="12" class="pos dynamic-col">
 				<Payments></Payments>
 			</v-col>
 
-			<v-col xl="7" lg="7" md="7" sm="7" cols="12" class="pos dynamic-col">
+			<v-col xl="5" lg="5" md="5" sm="12" cols="12" class="pos dynamic-col">
 				<Invoice></Invoice>
 			</v-col>
 		</v-row>
@@ -95,6 +130,10 @@ export default {
 			coupons: false,
 			itemsLoaded: false,
 			customersLoaded: false,
+			itemGroupsDrawer: false,
+			itemGroupsDrawerWidth: 280,
+			itemGroups: [],
+			selectedItemGroup: "ALL",
 		};
 	},
 
@@ -128,6 +167,11 @@ export default {
 			if (this.itemsLoaded && this.customersLoaded) {
 				console.info("Loading completed");
 			}
+		},
+		selectItemGroup(group) {
+			this.selectedItemGroup = group;
+			this.eventBus.emit("set_item_group", group);
+			this.itemGroupsDrawer = false;
 		},
 	},
 
@@ -178,6 +222,20 @@ export default {
 				this.itemsLoaded = true;
 				this.checkLoadingComplete();
 			});
+			this.eventBus.on("toggle_item_groups_drawer", (data) => {
+				console.log("[Pos] toggle_item_groups_drawer event received:", data);
+				this.itemGroupsDrawer = data === true || data === "true";
+				console.log("[Pos] itemGroupsDrawer set to:", this.itemGroupsDrawer);
+			});
+			this.eventBus.on("update_item_groups", (groups) => {
+				console.log("[Pos] update_item_groups event received:", groups);
+				this.itemGroups = groups || [];
+				console.log("[Pos] itemGroups set to:", this.itemGroups);
+			});
+			this.eventBus.on("update_selected_item_group", (group) => {
+				console.log("[Pos] update_selected_item_group event received:", group);
+				this.selectedItemGroup = group || "ALL";
+			});
 		});
 	},
 	beforeUnmount() {
@@ -190,6 +248,9 @@ export default {
 		this.eventBus.off("open_closing_dialog");
 		this.eventBus.off("submit_closing_pos");
 		this.eventBus.off("items_loaded");
+		this.eventBus.off("toggle_item_groups_drawer");
+		this.eventBus.off("update_item_groups");
+		this.eventBus.off("update_selected_item_group");
 	},
 	// In the created() or mounted() lifecycle hook
 	created() {
@@ -241,5 +302,35 @@ export default {
 		padding: var(--dynamic-xs);
 		margin-top: var(--dynamic-xs);
 	}
+}
+
+/* Item Groups Sidebar Styling */
+.item-groups-sidebar {
+	z-index: 1100 !important;
+	box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+	background-color: var(--pos-card-bg) !important;
+}
+
+.item-groups-sidebar .sidebar-header {
+	background-color: var(--pos-surface-primary);
+	border-bottom: 1px solid var(--pos-border);
+}
+
+.item-groups-sidebar :deep(.v-list-item-title) {
+	color: var(--pos-text-primary);
+}
+
+.item-groups-sidebar .group-item {
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.item-groups-sidebar .group-item:hover {
+	background-color: rgba(25, 118, 210, 0.1);
+}
+
+.item-groups-sidebar .group-item.v-list-item--active {
+	background-color: rgba(25, 118, 210, 0.2);
+	border-left: 3px solid var(--v-theme-primary);
 }
 </style>

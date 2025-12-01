@@ -11,7 +11,8 @@
 				@update:model-value="onUpdate"
 			/>
 		</v-col>
-		<v-col
+		<!-- Price List selector hidden -->
+		<!-- <v-col
 			v-if="pos_profile.posa_enable_price_list_dropdown"
 			cols="12"
 			sm="6"
@@ -32,9 +33,9 @@
 				<strong>{{ __("Customer Balance") }}:</strong>
 				<span class="balance-value">{{ formatCurrency(customer_balance) }}</span>
 			</div>
-		</v-col>
+		</v-col> -->
 		<v-col
-			v-else-if="pos_profile.posa_show_customer_balance"
+			v-if="pos_profile.posa_show_customer_balance"
 			cols="12"
 			sm="8"
 			class="pb-2 d-flex align-center"

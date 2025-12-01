@@ -16,6 +16,21 @@ from posawesome.posawesome.doctype.pos_coupon.pos_coupon import update_coupon_co
 
 
 def validate(doc, method):
+    # Skip stock validation if POS Profile allows sales without stock check
+    if doc.pos_profile:
+        allow_sales_without_stock = frappe.db.get_value(
+            "POS Profile", doc.pos_profile, "posa_allow_sales_without_stock_check"
+        )
+        if allow_sales_without_stock:
+            # Don't update stock to avoid validation
+            doc.update_stock = 0
+            doc.flags.skip_stock_validation = True
+            doc.flags.ignore_stock_validation = True
+            
+            # Remove payment rows with zero or negative amounts to avoid validation errors
+            if hasattr(doc, 'payments') and doc.payments:
+                doc.payments = [p for p in doc.payments if p.amount and p.amount > 0]
+    
     validate_shift(doc)
     set_patient(doc)
     auto_set_delivery_charges(doc)
@@ -24,8 +39,27 @@ def validate(doc, method):
 
 
 def before_submit(doc, method):
+    # Skip stock validation if POS Profile allows sales without stock check
+    if doc.pos_profile:
+        allow_sales_without_stock = frappe.db.get_value(
+            "POS Profile", doc.pos_profile, "posa_allow_sales_without_stock_check"
+        )
+        if allow_sales_without_stock:
+            doc.flags.skip_stock_validation = True
+    
     add_loyalty_point(doc)
     create_sales_order(doc)
+    
+    # Create Delivery Note from Sales Invoice if no Sales Order was created
+    if (
+        getattr(doc, "posa_pos_opening_shift", None)
+        and doc.pos_profile
+        and doc.is_pos
+        and not frappe.get_value("POS Profile", doc.pos_profile, "posa_allow_sales_order")
+        and doc.update_stock
+    ):
+        create_delivery_note_from_invoice(doc)
+    
     update_coupon(doc, "used")
 
 
@@ -121,6 +155,9 @@ def create_sales_order(doc):
                 doc.items[i].sales_order = sales_order_doc.name
                 doc.items[i].so_detail = item.name
                 i += 1
+            
+            # Create Delivery Note in draft from Sales Order
+            create_delivery_note_from_sales_order(sales_order_doc)
 
 
 def make_sales_order(source_name, target_doc=None, ignore_permissions=True):
@@ -166,6 +203,46 @@ def make_sales_order(source_name, target_doc=None, ignore_permissions=True):
     )
 
     return doclist
+
+
+def create_delivery_note_from_sales_order(sales_order_doc):
+	"""Create a Delivery Note in draft status from Sales Order."""
+	try:
+		from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
+		
+		delivery_note = make_delivery_note(sales_order_doc.name)
+		if delivery_note:
+			delivery_note.flags.ignore_permissions = True
+			delivery_note.set_posting_time = 1
+			delivery_note.posting_date = sales_order_doc.transaction_date
+			delivery_note.save()
+			
+			url = frappe.utils.get_url_to_form(delivery_note.doctype, delivery_note.name)
+			msgprint = f"Delivery Note (Draft) Created at <a href='{url}'>{delivery_note.name}</a>"
+			frappe.msgprint(_(msgprint), title="Delivery Note Created", indicator="blue", alert=True)
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "POSAwesome Delivery Note Creation Error")
+		frappe.msgprint(_("Failed to create Delivery Note: {0}").format(str(e)), indicator="red")
+
+
+def create_delivery_note_from_invoice(invoice_doc):
+	"""Create a Delivery Note in draft status from Sales Invoice."""
+	try:
+		from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_delivery_note
+		
+		delivery_note = make_delivery_note(invoice_doc.name)
+		if delivery_note:
+			delivery_note.flags.ignore_permissions = True
+			delivery_note.set_posting_time = 1
+			delivery_note.posting_date = invoice_doc.posting_date
+			delivery_note.save()
+			
+			url = frappe.utils.get_url_to_form(delivery_note.doctype, delivery_note.name)
+			msgprint = f"Delivery Note (Draft) Created at <a href='{url}'>{delivery_note.name}</a>"
+			frappe.msgprint(_(msgprint), title="Delivery Note Created", indicator="blue", alert=True)
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "POSAwesome Delivery Note Creation Error")
+		frappe.msgprint(_("Failed to create Delivery Note: {0}").format(str(e)), indicator="red")
 
 
 def update_coupon(doc, transaction_type):

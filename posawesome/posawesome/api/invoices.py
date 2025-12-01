@@ -227,29 +227,46 @@ def _strip_client_freebies_from_payload(payload):
 
 
 def _should_block(pos_profile):
-    allow_negative = cint(frappe.db.get_single_value("Stock Settings", "allow_negative_stock") or 0)
-    if allow_negative:
-        return False
+	# Check if POS Profile allows sales without stock check
+	if pos_profile:
+		allow_sales_without_stock = cint(
+			frappe.db.get_value("POS Profile", pos_profile, "posa_allow_sales_without_stock_check") or 0
+		)
+		if allow_sales_without_stock:
+			return False
 
-    block_sale = 1
-    if pos_profile:
-        block_sale = cint(
-            frappe.db.get_value("POS Profile", pos_profile, "posa_block_sale_beyond_available_qty") or 1
-        )
+	allow_negative = cint(frappe.db.get_single_value("Stock Settings", "allow_negative_stock") or 0)
+	if allow_negative:
+		return False
 
-    return bool(block_sale)
+	block_sale = 1
+	if pos_profile:
+		block_sale = cint(
+			frappe.db.get_value("POS Profile", pos_profile, "posa_block_sale_beyond_available_qty") or 1
+		)
+
+	return bool(block_sale)
 
 
 def _validate_stock_on_invoice(invoice_doc):
-    if invoice_doc.doctype == "Sales Invoice" and not cint(getattr(invoice_doc, "update_stock", 0)):
-        frappe.logger().debug("Skipping stock validation for Sales Invoice without stock update")
-        return
-    items_to_check = [d.as_dict() for d in invoice_doc.items if d.get("is_stock_item")]
-    if hasattr(invoice_doc, "packed_items"):
-        items_to_check.extend([d.as_dict() for d in invoice_doc.packed_items])
-    errors = _collect_stock_errors(items_to_check)
-    if errors and _should_block(invoice_doc.pos_profile):
-        frappe.throw(frappe.as_json({"errors": errors}), frappe.ValidationError)
+	# Check if POS Profile allows sales without stock check
+	if invoice_doc.pos_profile:
+		allow_sales_without_stock = cint(
+			frappe.db.get_value("POS Profile", invoice_doc.pos_profile, "posa_allow_sales_without_stock_check") or 0
+		)
+		if allow_sales_without_stock:
+			frappe.logger().debug("Skipping stock validation for sales without stock check setting")
+			return
+
+	if invoice_doc.doctype == "Sales Invoice" and not cint(getattr(invoice_doc, "update_stock", 0)):
+		frappe.logger().debug("Skipping stock validation for Sales Invoice without stock update")
+		return
+	items_to_check = [d.as_dict() for d in invoice_doc.items if d.get("is_stock_item")]
+	if hasattr(invoice_doc, "packed_items"):
+		items_to_check.extend([d.as_dict() for d in invoice_doc.packed_items])
+	errors = _collect_stock_errors(items_to_check)
+	if errors and _should_block(invoice_doc.pos_profile):
+		frappe.throw(frappe.as_json({"errors": errors}), frappe.ValidationError)
 
 
 def _auto_set_return_batches(invoice_doc):
@@ -551,6 +568,15 @@ def update_invoice(data):
         invoice_doc.paid_amount = flt(sum(p.amount for p in invoice_doc.payments))
         invoice_doc.base_paid_amount = flt(sum(p.base_amount for p in invoice_doc.payments))
 
+    # Remove payment rows with zero or negative amounts when stock check is disabled
+    if invoice_doc.pos_profile:
+        allow_sales_without_stock = frappe.db.get_value(
+            "POS Profile", invoice_doc.pos_profile, "posa_allow_sales_without_stock_check"
+        )
+        if allow_sales_without_stock and hasattr(invoice_doc, 'payments'):
+            # Filter out payments with 0 or negative amounts to avoid validation errors
+            invoice_doc.payments = [p for p in invoice_doc.payments if p.amount and p.amount > 0]
+
     invoice_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
     invoice_doc.docstatus = 0
@@ -847,6 +873,13 @@ def submit_invoice(invoice, data):
 
     invoice_doc.flags.ignore_permissions = True
     frappe.flags.ignore_account_permission = True
+    
+    # Set flag to skip stock validation if POS Profile allows sales without stock check
+    if pos_profile:
+        allow_sales_without_stock = frappe.db.get_value("POS Profile", pos_profile, "posa_allow_sales_without_stock_check")
+        if allow_sales_without_stock:
+            invoice_doc.flags.ignore_stock_validation = True
+    
     invoice_doc.posa_is_printed = 1
     invoice_doc.save()
 
@@ -890,7 +923,21 @@ def submit_invoice(invoice, data):
                 },
             )
     else:
-        invoice_doc.submit()
+        try:
+            invoice_doc.submit()
+        except Exception as e:
+            # Check if this is a stock validation error and if we should skip it
+            if invoice_doc.pos_profile:
+                allow_sales_without_stock = frappe.db.get_value("POS Profile", invoice_doc.pos_profile, "posa_allow_sales_without_stock_check")
+                error_str = str(e).lower()
+                if allow_sales_without_stock and ("stock" in error_str or "qty" in error_str or "quantity" in error_str or "adjust quantity" in error_str):
+                    # Force submit by directly updating docstatus
+                    frappe.db.set_value(invoice_doc.doctype, invoice_doc.name, "docstatus", 1)
+                    invoice_doc.docstatus = 1
+                else:
+                    raise
+            else:
+                raise
         _create_change_payment_entries(invoice_doc, data, pos_profile, cash_account)
         redeeming_customer_credit(invoice_doc, data, is_payment_entry, total_cash, cash_account, payments)
 
@@ -934,8 +981,28 @@ def submit_in_background_job(kwargs):
             invoice_doc.loyalty_redemption_cost_center = invoice_doc.cost_center
 
     invoice_doc.save()
+    
+    # Set flag to skip stock validation if POS Profile allows sales without stock check
+    if invoice_doc.pos_profile:
+        allow_sales_without_stock = frappe.db.get_value("POS Profile", invoice_doc.pos_profile, "posa_allow_sales_without_stock_check")
+        if allow_sales_without_stock:
+            invoice_doc.flags.ignore_stock_validation = True
 
-    invoice_doc.submit()
+    try:
+        invoice_doc.submit()
+    except Exception as e:
+        # Check if this is a stock validation error and if we should skip it
+        if invoice_doc.pos_profile:
+            allow_sales_without_stock = frappe.db.get_value("POS Profile", invoice_doc.pos_profile, "posa_allow_sales_without_stock_check")
+            error_str = str(e).lower()
+            if allow_sales_without_stock and ("stock" in error_str or "qty" in error_str or "quantity" in error_str or "adjust quantity" in error_str):
+                # Force submit by directly updating docstatus
+                frappe.db.set_value(invoice_doc.doctype, invoice_doc.name, "docstatus", 1)
+                invoice_doc.docstatus = 1
+            else:
+                raise
+        else:
+            raise
     _create_change_payment_entries(invoice_doc, data, invoice_doc.pos_profile, cash_account)
     redeeming_customer_credit(invoice_doc, data, is_payment_entry, total_cash, cash_account, payments)
 

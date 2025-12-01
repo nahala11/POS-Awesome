@@ -46,8 +46,27 @@
 			></v-progress-linear>
 
 			<!-- Add dynamic-padding wrapper like Invoice component -->
-			<div class="dynamic-padding">
+			<div class="dynamic-padding" style="padding-bottom: 0 !important;">
 				<div class="sticky-header">
+					<!-- Item Groups Trigger Button -->
+					<v-row class="items mb-2">
+						<v-col cols="12">
+							<v-btn
+								block
+								variant="outlined"
+								color="primary"
+								prepend-icon="mdi-menu"
+								@click="toggleItemGroupsDrawer"
+								class="item-groups-trigger-btn"
+							>
+								<div class="d-flex align-center w-100">
+									<span class="item-group-label">{{ __("Item Group:") }}</span>
+									<span class="text-truncate flex-grow-1">{{ item_group || __("All Items") }}</span>
+									<v-icon end>mdi-chevron-right</v-icon>
+								</div>
+							</v-btn>
+						</v-col>
+					</v-row>
 					<v-row class="items">
 						<v-col class="pb-0">
 							<v-text-field
@@ -400,19 +419,10 @@
 				</v-row>
 			</div>
 		</v-card>
-		<v-card class="cards mb-0 mt-3 dynamic-padding resizable" style="resize: vertical; overflow: auto">
-			<v-row no-gutters align="center" justify="center" class="dynamic-spacing-sm">
-				<v-col cols="12" class="mb-2">
-					<v-select
-						:items="items_group"
-						:label="frappe._('Items Group')"
-						density="compact"
-						variant="solo"
-						hide-details
-						v-model="item_group"
-					></v-select>
-				</v-col>
-				<v-col cols="12" class="mb-2" v-if="pos_profile.posa_enable_price_list_dropdown !== false">
+		<v-card class="cards mb-0 mt-0 list-card-section">
+			<v-row no-gutters align="center" justify="center" class="ma-0">
+				<!-- Price List display hidden -->
+				<!-- <v-col cols="12" class="mb-2" v-if="pos_profile.posa_enable_price_list_dropdown !== false">
 					<v-text-field
 						density="compact"
 						variant="solo"
@@ -422,7 +432,7 @@
 						:model-value="active_price_list"
 						readonly
 					></v-text-field>
-				</v-col>
+				</v-col> -->
 				<v-col cols="3" class="dynamic-margin-xs">
 					<v-btn-toggle v-model="items_view" color="primary" group density="compact" rounded>
 						<v-btn size="small" value="list">{{ __("List") }}</v-btn>
@@ -451,6 +461,39 @@
 						class="action-btn-consistent"
 						>{{ couponsCount }} {{ __("Coupons") }}</v-btn
 					>
+				</v-col>
+			</v-row>
+		</v-card>
+		
+		<!-- Discount Section -->
+		<v-card class="cards mb-0 mt-2 list-card-section">
+			<v-row dense class="ma-0">
+				<!-- Additional Discount -->
+				<v-col cols="6" class="pa-1">
+					<v-text-field
+						:model-value="additional_discount"
+						@update:model-value="update_additional_discount"
+						:label="__('Additional Discount')"
+						prepend-inner-icon="mdi-cash-minus"
+						variant="solo"
+						density="compact"
+						color="warning"
+						hide-details
+						:disabled="!pos_profile.posa_allow_user_to_edit_additional_discount"
+					/>
+				</v-col>
+				<!-- Items Discount -->
+				<v-col cols="6" class="pa-1">
+					<v-text-field
+						:model-value="total_items_discount"
+						:label="__('Items Discounts')"
+						prepend-inner-icon="mdi-tag-minus"
+						variant="solo"
+						density="compact"
+						color="warning"
+						readonly
+						hide-details
+					/>
 				</v-col>
 			</v-row>
 		</v-card>
@@ -565,6 +608,8 @@ export default {
 		appliedCouponsCount: 0,
 		new_line: false,
 		qty: 1,
+		additional_discount: 0,
+		total_items_discount: 0,
 		refresh_interval: null,
 		abortController: null,
 		itemDetailsRequestCache: { key: null, promise: null, result: null },
@@ -858,6 +903,9 @@ export default {
 	},
 
 	methods: {
+		update_additional_discount(value) {
+			this.eventBus.emit("update_additional_discount_from_items", value);
+		},
 		normalizeScaleBarcodeSettings(rawSettings = {}) {
 			const settings = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
 			const prefix = String(settings.prefix || "").trim();
@@ -1438,6 +1486,12 @@ export default {
 		show_coupons() {
 			this.eventBus.emit("show_coupons", "true");
 		},
+		toggleItemGroupsDrawer() {
+			console.log("[ItemsSelector] toggleItemGroupsDrawer called");
+			console.log("[ItemsSelector] items_group:", this.items_group);
+			this.eventBus.emit("toggle_item_groups_drawer", true);
+			this.eventBus.emit("update_item_groups", this.items_group);
+		},
 		async initializeItems() {
 			await this.ensureStorageHealth();
 			if (
@@ -1671,11 +1725,13 @@ export default {
 		},
 
 		get_items_groups() {
+			console.log("[ItemsSelector] get_items_groups called");
 			if (!this.pos_profile) {
 				console.log("No POS Profile");
 				return;
 			}
 			this.items_group = ["ALL"];
+			console.log("[ItemsSelector] pos_profile.item_groups:", this.pos_profile.item_groups);
 			if (this.pos_profile.item_groups.length > 0) {
 				const groups = [];
 				this.pos_profile.item_groups.forEach((element) => {
@@ -1685,11 +1741,17 @@ export default {
 					}
 				});
 				saveItemGroups(groups);
+				// Emit to parent after loading from profile
+				this.eventBus.emit("update_item_groups", this.items_group);
+				this.eventBus.emit("update_selected_item_group", this.item_group || "ALL");
 			} else if (isOffline()) {
 				const cached = getCachedItemGroups();
 				cached.forEach((g) => {
 					this.items_group.push(g);
 				});
+				// Emit to parent after loading from cache
+				this.eventBus.emit("update_item_groups", this.items_group);
+				this.eventBus.emit("update_selected_item_group", this.item_group || "ALL");
 			} else {
 				const vm = this;
 				frappe.call({
@@ -1703,6 +1765,9 @@ export default {
 								groups.push(element.name);
 							});
 							saveItemGroups(groups);
+							// Emit after data is loaded
+							vm.eventBus.emit("update_item_groups", vm.items_group);
+							vm.eventBus.emit("update_selected_item_group", vm.item_group || "ALL");
 						}
 					},
 				});
@@ -3538,8 +3603,9 @@ export default {
 					? this.format_number(requestedQty, this.hide_qty_decimals ? 0 : this.float_precision)
 					: requestedQty;
 				const negativeStockEnabled = this.isNegativeStockEnabled();
+				const allowSalesWithoutStock = this.pos_profile?.posa_allow_sales_without_stock_check;
 				const shouldBlock =
-					!negativeStockEnabled && (this.blockSaleBeyondAvailableQty || availableQty <= 0);
+					!negativeStockEnabled && !allowSalesWithoutStock && (this.blockSaleBeyondAvailableQty || availableQty <= 0);
 
 				if (shouldBlock) {
 					this.showScanError({
@@ -4206,6 +4272,17 @@ export default {
 			this.applyCurrencyConversionToItems();
 			this.update_cur_items_details();
 		});
+		// Listen for item group selection from sidebar
+		this.eventBus.on("set_item_group", (group) => {
+			this.item_group = group;
+			this.eventBus.emit("update_selected_item_group", group);
+			this.get_items();
+		});
+		// Listen for discount updates from Invoice component
+		this.eventBus.on("update_discounts", (data) => {
+			this.additional_discount = data.additional_discount || 0;
+			this.total_items_discount = data.total_items_discount || 0;
+		});
 	},
 
 	async mounted() {
@@ -4533,13 +4610,14 @@ export default {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-/* Enhanced Card View Grid Layout - 3 items per row */
+/* Enhanced Card View Grid Layout - Auto-fit columns for flexible width */
 .items-card-grid {
 	display: grid;
-	grid-template-columns: repeat(3, 1fr);
-	gap: 16px;
-	padding: 16px;
-	height: calc(100% - 80px);
+	grid-template-columns: repeat(4, 1fr) !important;
+	gap: 12px !important;
+	padding: 12px !important;
+	min-height: calc(100vh - 200px) !important;
+	height: 100% !important;
 	overflow-y: auto;
 	scrollbar-width: thin;
 	scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
@@ -4971,7 +5049,7 @@ export default {
 /* Responsive breakpoints */
 @media (max-width: 1200px) {
 	.items-card-grid {
-		grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: repeat(3, 1fr) !important;
 		gap: 12px;
 		padding: 12px;
 	}
@@ -5106,5 +5184,85 @@ export default {
 		animation: none !important;
 		transform: none !important;
 	}
+}
+
+/* Item Groups Trigger Button */
+.item-groups-trigger-btn {
+	justify-content: space-between !important;
+	text-transform: none !important;
+	padding: 8px 12px !important;
+	font-weight: 500 !important;
+}
+
+.item-groups-trigger-btn :deep(.v-btn__content) {
+	width: 100%;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.item-groups-trigger-btn .item-group-label {
+	font-weight: 600 !important;
+	margin-right: 8px;
+	color: var(--v-theme-primary);
+	font-size: 0.875rem;
+	white-space: nowrap;
+}
+
+.item-groups-trigger-btn .text-truncate {
+	text-align: left;
+	margin: 0 8px;
+}
+
+/* Items List/Card Container - Fill available space */
+.items-table-container,
+.items-card-container {
+	min-height: 95vh !important;
+	height: 100% !important;
+	overflow-y: auto;
+	margin-bottom: 0 !important;
+	padding-bottom: 0 !important;
+	width: 100% !important;
+}
+
+.items-card-container .virtual-scroller {
+	min-height: 95vh !important;
+	height: 100% !important;
+	width: 100% !important;
+}
+
+/* List/Card section at bottom with minimal padding */
+.list-card-section {
+	padding: 8px 12px !important;
+}
+
+/* Remove bottom margin/padding from items row */
+.items {
+	margin-bottom: 0 !important;
+	width: 100% !important;
+}
+
+/* Remove extra spacing from dynamic-padding wrapper */
+.dynamic-padding {
+	padding: var(--dynamic-sm) !important;
+	padding-bottom: 0 !important;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+/* Make the main card fill without extra spacing */
+.selection {
+	padding: 0 !important;
+}
+
+/* Ensure rows and cols have no extra margins */
+.items v-row {
+	margin: 0 !important;
+}
+
+.items v-col {
+	padding-left: 0 !important;
+	padding-right: 0 !important;
 }
 </style>

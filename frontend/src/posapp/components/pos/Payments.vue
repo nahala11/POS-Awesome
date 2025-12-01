@@ -1448,7 +1448,7 @@ export default {
 					return;
 				}
 				// Validate stock availability before submitting
-				if (!isOffline()) {
+				if (!isOffline() && !this.pos_profile.posa_allow_sales_without_stock_check) {
 					try {
 						const itemsToCheck = this.invoice_doc.items.filter((it) => !it.is_bundle);
 						const stockCheck = await frappe.call({

@@ -1941,6 +1941,9 @@ export default {
 				doc.return_against = this.invoice_doc.return_against;
 			}
 			doc.update_stock = 1;
+		} else if (this.pos_profile.posa_allow_sales_without_stock_check) {
+			// If POS allows sales without stock check, don't update stock
+			doc.update_stock = 0;
 
 			// Double-check all values are negative
 			if (doc.grand_total > 0) doc.grand_total = -Math.abs(doc.grand_total);
@@ -4227,6 +4230,27 @@ export default {
 		calcStockQty(item, value, this);
 		if (this.update_qty_limits) {
 			this.update_qty_limits(item);
+		}
+
+		// Check if POS allows sales without stock validation
+		const allowSalesWithoutStock = this.pos_profile?.posa_allow_sales_without_stock_check;
+		if (allowSalesWithoutStock) {
+			// Skip stock validation if the setting is enabled
+			if (flt(item.qty) === 0) {
+				this.remove_item(item);
+				this.$forceUpdate();
+				return;
+			}
+			if (!this._applyingPricingRules) {
+				this.schedulePricingRuleApplication();
+			}
+			// Clear payment amounts when quantity changes to avoid validation errors
+			if (this.invoice_doc && this.invoice_doc.payments) {
+				this.invoice_doc.payments.forEach(payment => {
+					payment.amount = 0;
+				});
+			}
+			return;
 		}
 
 		const blockSale =
