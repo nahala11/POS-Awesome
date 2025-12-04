@@ -67,25 +67,7 @@
 					"
 				/>
 
-				<!-- Posting Date and Customer Balance Section -->
-				<PostingDateRow
-					:pos_profile="pos_profile"
-					:posting_date_display="posting_date_display"
-					:customer_balance="customer_balance"
-					:price-list="selected_price_list"
-					:price-lists="price_lists"
-					:formatCurrency="formatCurrency"
-					@update:posting_date_display="
-						(val) => {
-							posting_date_display = val;
-						}
-					"
-					@update:priceList="
-						(val) => {
-							selected_price_list = val;
-						}
-					"
-				/>
+				
 
 				<!-- Multi-Currency Section (Only if enabled in POS profile) -->
 				<MultiCurrencyRow
@@ -336,6 +318,7 @@
 			@apply-offers="apply_offers_and_reload"
 			@show-payment="show_payment"
 		/>
+		
 	</div>
 </template>
 
@@ -1739,6 +1722,12 @@ export default {
 	},
 
 	mounted() {
+		// Auto-set today's date by triggering the posting_date watcher
+		// Use $nextTick to ensure watchers are properly set up
+		this.$nextTick(() => {
+			this.posting_date = frappe.datetime.nowdate();
+		});
+
 		// Load saved column preferences
 		this.loadColumnPreferences();
 		// Restore saved invoice height

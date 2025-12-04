@@ -2359,6 +2359,13 @@ export default {
 				const default_payment = this.invoice_doc.payments.find((payment) => payment.default === 1);
 				this.is_credit_sale = false;
 				this.is_write_off_change = false;
+				// Auto-populate delivery date for Sales Orders
+				if (invoice_doc.doctype === 'Sales Order' || this.invoiceType === 'Order') {
+					if (!this.new_delivery_date) {
+						this.new_delivery_date = this.formatDateDisplay(frappe.datetime.now_date());
+						this.update_delivery_date();
+					}
+				}
 				if (invoice_doc.is_return) {
 					this.is_return = true;
 					this.is_credit_return = false;

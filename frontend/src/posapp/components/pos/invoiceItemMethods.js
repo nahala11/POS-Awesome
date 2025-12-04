@@ -2258,7 +2258,7 @@ export default {
 				base_amount: base_amount, // Convert to base currency (e.g. PKR)
 				mode_of_payment: payment.mode_of_payment,
 				default: payment.default,
-				account: payment.account || "",
+				account: payment.account || "", // Account from mode_of_payment
 				type: payment.type || "Cash",
 				currency: this.selected_currency || this.pos_profile.currency,
 				conversion_rate: this.conversion_rate || 1,

@@ -1,5 +1,5 @@
 <template>
-	<v-row align="center" class="items px-3 py-2 mt-0" v-if="pos_profile.posa_allow_change_posting_date">
+	<v-row align="center" class="items px-3 py-2 mt-0">
 		<v-col cols="12" sm="4" class="pb-2">
 			<VueDatePicker
 				v-model="internal_posting_date_display"
@@ -60,7 +60,7 @@ export default {
 	},
 	data() {
 		return {
-			internal_posting_date_display: this.posting_date_display,
+			internal_posting_date_display: this.posting_date_display || this.formatDateToday(),
 			internal_price_list: this.priceList,
 		};
 	},
@@ -74,6 +74,14 @@ export default {
 		},
 	},
 	methods: {
+		formatDateToday() {
+			// Format today's date as dd-MM-yyyy
+			const today = new Date();
+			const day = String(today.getDate()).padStart(2, '0');
+			const month = String(today.getMonth() + 1).padStart(2, '0');
+			const year = today.getFullYear();
+			return `${day}-${month}-${year}`;
+		},
 		onUpdate(val) {
 			this.$emit("update:posting_date_display", val);
 		},
