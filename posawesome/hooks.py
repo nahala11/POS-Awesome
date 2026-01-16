@@ -111,6 +111,12 @@ doc_events = {
         "validate": "posawesome.posawesome.api.customer.validate",
         "after_insert": "posawesome.posawesome.api.customer.after_insert",
     },
+    "Stock Reconciliation": {
+        "on_submit": "posawesome.posawesome.api.stock_utils.on_stock_reconciliation_submit",
+    },
+    "Stock Entry": {
+        "on_submit": "posawesome.posawesome.api.stock_utils.on_stock_entry_submit",
+    },
 }
 
 # Scheduled Tasks

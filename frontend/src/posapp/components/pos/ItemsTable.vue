@@ -322,10 +322,10 @@
 											class="pos-themed-input"
 											hide-details
 											:model-value="formatCurrency(item.rate)"
-											@change="[
-												setFormatedCurrency(item, 'rate', null, false, $event),
-												calcPrices(item, $event.target.value, $event),
-											]"
+											@blur="(e) => {
+												setFormatedCurrency(item, 'rate', null, false, e);
+												calcPrices(item, item.rate, e);
+											}"
 											:disabled="
 												!pos_profile.posa_allow_user_to_edit_rate ||
 												!!item.posa_is_replace ||
@@ -346,16 +346,10 @@
 											:model-value="
 												formatFloat(Math.abs(item.discount_percentage || 0))
 											"
-											@change="[
-												setFormatedCurrency(
-													item,
-													'discount_percentage',
-													null,
-													false,
-													$event,
-												),
-												calcPrices(item, $event.target.value, $event),
-											]"
+											@blur="(e) => {
+												setFormatedCurrency(item, 'discount_percentage', null, false, e);
+												calcPrices(item, item.discount_percentage, e);
+											}"
 											:disabled="
 												!pos_profile.posa_allow_user_to_edit_item_discount ||
 												!!item.posa_is_replace ||
@@ -373,17 +367,32 @@
 											:label="frappe._('Discount Amount')"
 											class="pos-themed-input"
 											hide-details
-											:model-value="formatCurrency(Math.abs(item.discount_amount || 0))"
-											@change="[
-												setFormatedCurrency(
-													item,
-													'discount_amount',
-													null,
-													false,
-													$event,
-												),
-												calcPrices(item, $event.target.value, $event),
-											]"
+											:model-value="item._discount_display !== undefined ? item._discount_display : formatCurrency(item.discount_amount || 0)"
+											@focus="item._discount_display = item.discount_amount || ''"
+											@input="(e) => {
+												const val = e.target.value;
+												item._discount_display = val;
+												const numVal = parseFloat(String(val).replace(/,/g, '')) || 0;
+												item.discount_amount = numVal;
+												
+												// Lock the discount so it's not overwritten by pricing rules
+												item._manual_discount_lock = !!numVal;
+												
+												// Recalculate rate immediately
+												if (item.price_list_rate && item.price_list_rate > 0) {
+													item.rate = Math.max(0, item.price_list_rate - numVal);
+													item.discount_percentage = (numVal / item.price_list_rate) * 100;
+												}
+												
+												// Update amount
+												item.amount = item.qty * item.rate;
+											}"
+											@blur="(e) => {
+												setFormatedCurrency(item, 'discount_amount', null, false, e);
+												calcPrices(item, item.discount_amount, e);
+												item._manual_discount_lock = !!item.discount_amount;
+												item._discount_display = undefined;
+											}"
 											:disabled="
 												!pos_profile.posa_allow_user_to_edit_item_discount ||
 												!!item.posa_is_replace ||

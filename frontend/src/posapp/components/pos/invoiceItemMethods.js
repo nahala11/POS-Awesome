@@ -223,6 +223,11 @@ export default {
 			return;
 		}
 
+		// Skip pricing rule application if discount is manually locked
+		if (item._manual_discount_lock) {
+			return;
+		}
+
 		const allowRateUpdate = !item.locked_price && !item.posa_offer_applied && !item._manual_rate_set;
 		const rawDocQty = Number.parseFloat(item.qty || 0);
 		const signedDocQty = Number.isFinite(rawDocQty) ? rawDocQty : 0;
@@ -1038,13 +1043,14 @@ export default {
 				Number.parseFloat(update.discount_percentage ?? item.discount_percentage ?? 0) || 0;
 
 			const manualOverride = item._manual_rate_set === true;
+			const discountLocked = item._manual_discount_lock === true;
 			const priceLocked = item.locked_price === true;
 			const offerApplied =
 				item.posa_offer_applied === true ||
 				item.posa_offer_applied === 1 ||
 				item.posa_offer_applied === "1";
 
-			let allowServerRateUpdate = !manualOverride && !priceLocked && !offerApplied;
+			let allowServerRateUpdate = !manualOverride && !priceLocked && !offerApplied && !discountLocked;
 
 			if (allowServerRateUpdate) {
 				const parentKey = item.posa_row_id || item.name || targetId || null;
@@ -1074,14 +1080,14 @@ export default {
 						: false;
 				const serverRemovedDiscount =
 					(!Number.isFinite(baseDiscount) || baseDiscount <= 0) &&
-					Number.isFinite(originalBaseDiscount)
+						Number.isFinite(originalBaseDiscount)
 						? originalBaseDiscount > 0
 						: false;
 				const serverRemovedPercentage =
 					(!Number.isFinite(discountPercentage) || discountPercentage <= 0) &&
-					Number.isFinite(originalBaseDiscount) &&
-					Number.isFinite(originalBasePriceList) &&
-					originalBasePriceList > 0
+						Number.isFinite(originalBaseDiscount) &&
+						Number.isFinite(originalBasePriceList) &&
+						originalBasePriceList > 0
 						? originalBaseDiscount >= originalBasePriceList - epsilon
 						: false;
 				const serverFullDiscount =
@@ -1092,8 +1098,8 @@ export default {
 						baseDiscount >= basePriceListRate - epsilon);
 				const fallbackFullDiscount =
 					Number.isFinite(originalBasePriceList) &&
-					originalBasePriceList > 0 &&
-					Number.isFinite(originalBaseDiscount)
+						originalBasePriceList > 0 &&
+						Number.isFinite(originalBaseDiscount)
 						? originalBaseDiscount >= originalBasePriceList - epsilon
 						: false;
 
@@ -2329,9 +2335,9 @@ export default {
 						this.eventBus.emit("show_message", {
 							title: __(
 								"Exchange rate date " +
-									this.exchange_rate_date +
-									" differs from posting date " +
-									posting_backend,
+								this.exchange_rate_date +
+								" differs from posting date " +
+								posting_backend,
 							),
 							color: "warning",
 						});
@@ -2375,9 +2381,9 @@ export default {
 						this.eventBus.emit("show_message", {
 							title: __(
 								"Exchange rate date " +
-									this.exchange_rate_date +
-									" differs from posting date " +
-									posting_backend,
+								this.exchange_rate_date +
+								" differs from posting date " +
+								posting_backend,
 							),
 							color: "warning",
 						});
@@ -2705,7 +2711,7 @@ export default {
 				coerce(item.same_item) ||
 				Boolean(
 					(typeof item.auto_free_source === "string" && item.auto_free_source) ||
-						(typeof item.free_item_source === "string" && item.free_item_source),
+					(typeof item.free_item_source === "string" && item.free_item_source),
 				);
 
 			if (expectsFree !== itemIsFree) {

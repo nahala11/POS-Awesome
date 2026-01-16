@@ -48,6 +48,9 @@ export function useDiscounts() {
 		const fieldId = $event.target.id;
 		let newValue = flt(value, context.currency_precision);
 
+		// Set flag to prevent offer recalculation during manual edit
+		item._manual_edit = true;
+
 		try {
 			// Flag to track manual rate changes
 			if (fieldId === "rate") {
@@ -100,33 +103,39 @@ export function useDiscounts() {
 					break;
 
 				case "discount_amount":
-					// Ensure discount amount doesn't exceed price list rate
-					newValue = Math.min(newValue, converted_price_list_rate);
-
+					// Don't allow changes if discount is manually locked
+					if (item._manual_discount_lock && item.discount_amount !== undefined) {
+						// Keep the existing discount, just recalculate other fields
+						newValue = item.discount_amount;
+					}
+					
+					// Store the discount amount
+					item.discount_amount = newValue;
+					
 					// Store base discount and convert to selected currency
 					item.base_discount_amount = context.flt(
 						newValue / context.exchange_rate,
 						context.currency_precision,
 					);
-					item.discount_amount = newValue;
 
-					// Update rate based on discount
-					item.rate = context.flt(
-						converted_price_list_rate - item.discount_amount,
-						context.currency_precision,
-					);
-					item.base_rate = context.flt(
-						item.price_list_rate - item.base_discount_amount,
-						context.currency_precision,
-					);
-
-					// Calculate percentage
-					if (converted_price_list_rate) {
+					// Update rate based on discount only if we have a valid price list rate
+					if (converted_price_list_rate && converted_price_list_rate > 0) {
+						item.rate = context.flt(
+							Math.max(0, converted_price_list_rate - item.discount_amount),
+							context.currency_precision,
+						);
+						item.base_rate = context.flt(
+							Math.max(0, item.price_list_rate - item.base_discount_amount),
+							context.currency_precision,
+						);
+						
+						// Calculate percentage
 						item.discount_percentage = context.flt(
 							(item.discount_amount / converted_price_list_rate) * 100,
 							context.float_precision,
 						);
 					} else {
+						// If no price list rate, just keep the current rate
 						item.discount_percentage = 0;
 					}
 					break;
@@ -158,13 +167,15 @@ export function useDiscounts() {
 					break;
 			}
 
-			// Ensure rate doesn't go below zero
-			if (item.rate < 0) {
+			// Ensure rate doesn't go below zero (but don't reset discount for manual edits)
+			if (item.rate < 0 && fieldId !== "discount_amount") {
 				item.rate = 0;
 				item.base_rate = 0;
-				item.discount_amount = converted_price_list_rate;
-				item.base_discount_amount = item.price_list_rate;
-				item.discount_percentage = 100;
+				if (converted_price_list_rate > 0) {
+					item.discount_amount = converted_price_list_rate;
+					item.base_discount_amount = item.price_list_rate;
+					item.discount_percentage = 100;
+				}
 			}
 
 			// Update stock calculations and force UI update
@@ -176,6 +187,13 @@ export function useDiscounts() {
 				title: __("Error calculating prices"),
 				color: "error",
 			});
+		} finally {
+			// Clear the manual edit flag after a short delay to allow watcher to see it
+			setTimeout(() => {
+				if (item) {
+					delete item._manual_edit;
+				}
+			}, 100);
 		}
 	};
 
@@ -184,6 +202,22 @@ export function useDiscounts() {
 		// Skip recalculation if called from update_item_rates to avoid double calculations
 		if (item._skip_calc) {
 			item._skip_calc = false;
+			return;
+		}
+		
+		// Skip discount recalculation if manually set by user (permanent lock)
+		if (item._manual_discount_lock) {
+			item.amount = context.flt(item.qty * item.rate, context.currency_precision);
+			const baseCurrency = context.price_list_currency || context.pos_profile.currency;
+			if (context.selected_currency !== baseCurrency) {
+				item.base_amount = context.flt(
+					item.amount / context.exchange_rate,
+					context.currency_precision,
+				);
+			} else {
+				item.base_amount = item.amount;
+			}
+			if (context.forceUpdate) context.forceUpdate();
 			return;
 		}
 

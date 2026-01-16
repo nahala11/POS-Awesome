@@ -135,12 +135,21 @@ export default {
 				};
 			}
 
-			if (!previous) {
-				if (snapshot.order.length) {
-					this.scheduleOfferRefresh([...new Set(snapshot.order)]);
+			// Check if any changed item has manual edit flag
+			const hasManualEdit = Array.from(changed).some(rowId => {
+				const item = newItems.find(it => it && it.posa_row_id === rowId);
+				return item && item._manual_edit;
+			});
+
+			// Skip offer refresh if manual edit is in progress
+			if (!hasManualEdit) {
+				if (!previous) {
+					if (snapshot.order.length) {
+						this.scheduleOfferRefresh([...new Set(snapshot.order)]);
+					}
+				} else if (changed.size) {
+					this.scheduleOfferRefresh(Array.from(changed));
 				}
-			} else if (changed.size) {
-				this.scheduleOfferRefresh(Array.from(changed));
 			}
 
 			if (typeof this.emitCartQuantities === "function") {
