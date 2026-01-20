@@ -14,6 +14,8 @@ vi.mock("../src/lib/pricingEngine.js", () => ({
 import invoiceItemMethods from "../src/posapp/components/pos/invoiceItemMethods.js";
 import { applyLocalPricingRules, computeFreeItems } from "../src/lib/pricingEngine.js";
 
+global.__ = vi.fn((s) => s);
+
 const createContext = () => ({
 	pos_profile: {
 		currency: "USD",
@@ -150,6 +152,38 @@ describe("invoiceItemMethods._applyItemDetailPayload", () => {
 		expect(item.base_discount_amount).toBeCloseTo(5);
 		expect(item.rate).toBeCloseTo(95);
 		expect(item.base_rate).toBeCloseTo(95);
+	});
+
+	it("respects _manual_discount_lock and does not apply server discount", () => {
+		const context = createContext();
+		const item = {
+			item_code: "ITEM-3",
+			qty: 1,
+			price_list_rate: 100,
+			base_price_list_rate: 100,
+			rate: 100,
+			base_rate: 100,
+			posa_offer_applied: 0,
+			posa_is_offer: 0,
+			posa_is_replace: "",
+			discount_amount: 0,
+			base_discount_amount: 0,
+			discount_percentage: 0,
+			_manual_discount_lock: true,
+			has_batch_no: 0,
+			has_serial_no: 0,
+		};
+
+		const data = {
+			discount_percentage: 10,
+			price_list_rate: 100,
+		};
+
+		invoiceItemMethods._applyItemDetailPayload.call(context, item, data);
+
+		expect(item.discount_percentage).toBe(0);
+		expect(item.discount_amount).toBe(0);
+		expect(item.rate).toBe(100);
 	});
 });
 

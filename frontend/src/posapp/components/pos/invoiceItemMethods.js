@@ -2073,8 +2073,11 @@ export default {
 				item.amount = flt(updatedData.qty) * flt(updatedData.rate);
 				item.conversion_factor = updatedData.conversion_factor;
 				item.serial_no = updatedData.serial_no;
-				item.discount_percentage = flt(updatedData.discount_percentage);
-				item.discount_amount = flt(updatedData.discount_amount);
+				const discountLocked = item._manual_discount_lock === true;
+				if (!discountLocked) {
+					item.discount_percentage = flt(updatedData.discount_percentage);
+					item.discount_amount = flt(updatedData.discount_amount);
+				}
 				item.batch_no = updatedData.batch_no;
 				item.posa_notes = updatedData.posa_notes;
 				item.posa_delivery_date = this.formatDateForDisplay(updatedData.posa_delivery_date);
@@ -3603,7 +3606,10 @@ export default {
 		item.locked_price = data.locked_price;
 		item.description = data.description;
 		item.item_tax_template = data.item_tax_template;
-		item.discount_percentage = data.discount_percentage;
+		const discountLocked = item._manual_discount_lock === true;
+		if (!discountLocked) {
+			item.discount_percentage = data.discount_percentage;
+		}
 		item.warehouse = data.warehouse || item.warehouse;
 		item.has_batch_no = data.has_batch_no;
 		item.has_serial_no = data.has_serial_no;
@@ -3725,7 +3731,16 @@ export default {
 			const serverDiscountPercentage = Number.parseFloat(data.discount_percentage);
 			const hasServerPercentage =
 				Number.isFinite(serverDiscountPercentage) && serverDiscountPercentage !== 0;
-			if (hasServerPercentage && !item.posa_offer_applied && !item._manual_rate_set) {
+
+			// Check if manual discount is locked
+			const discountLocked = item._manual_discount_lock === true;
+
+			if (
+				hasServerPercentage &&
+				!item.posa_offer_applied &&
+				!item._manual_rate_set &&
+				!discountLocked
+			) {
 				const existingDiscount = Number(item.discount_amount) || 0;
 				const EPSILON = 0.000001;
 				if (Math.abs(existingDiscount) < EPSILON) {
@@ -3770,7 +3785,8 @@ export default {
 				this.customer_info.posa_discount > 0 &&
 				this.customer_info.posa_discount <= 100 &&
 				item.posa_is_offer == 0 &&
-				!item.posa_is_replace
+				!item.posa_is_replace &&
+				!discountLocked
 			) {
 				const discount_percent =
 					item.max_discount > 0

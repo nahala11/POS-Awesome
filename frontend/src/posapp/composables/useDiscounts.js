@@ -141,6 +141,12 @@ export function useDiscounts() {
 					break;
 
 				case "discount_percentage":
+				// Don't allow changes if discount is manually locked
+				if (item._manual_discount_lock && item.discount_percentage !== undefined) {
+					// Keep the existing discount, just recalculate other fields
+					newValue = item.discount_percentage;
+				}
+				
 					// Ensure percentage doesn't exceed 100%
 					newValue = Math.min(newValue, 100);
 					item.discount_percentage = context.flt(newValue, context.float_precision);

@@ -343,12 +343,34 @@
 											:label="frappe._('Discount %')"
 											class="pos-themed-input"
 											hide-details
-											:model-value="
-												formatFloat(Math.abs(item.discount_percentage || 0))
-											"
+											:model-value="item._discount_percentage_display !== undefined ? item._discount_percentage_display : formatFloat(Math.abs(item.discount_percentage || 0))"
+											@focus="item._discount_percentage_display = item.discount_percentage || ''"
+											@input="(e) => {
+												const val = e.target.value;
+												item._discount_percentage_display = val;
+												const numVal = parseFloat(String(val).replace(/,/g, '')) || 0;
+												item.discount_percentage = numVal;
+												
+												// Lock the discount so it's not overwritten by pricing rules
+												item._manual_discount_lock = !!numVal;
+												
+												// Recalculate rate and amount immediately
+												if (item.price_list_rate && item.price_list_rate > 0) {
+													const discountAmt = (numVal / 100) * item.price_list_rate;
+													item.rate = Math.max(0, item.price_list_rate - discountAmt);
+													item.discount_amount = discountAmt;
+													// Clear the display variable so the calculated amount shows
+													item._discount_display = undefined;
+												}
+												
+												// Update amount
+												item.amount = item.qty * item.rate;
+											}"
 											@blur="(e) => {
-												setFormatedCurrency(item, 'discount_percentage', null, false, e);
+												setFormatedFloat(item, 'discount_percentage', null, false, e);
 												calcPrices(item, item.discount_percentage, e);
+												item._manual_discount_lock = !!item.discount_percentage;
+												item._discount_percentage_display = undefined;
 											}"
 											:disabled="
 												!pos_profile.posa_allow_user_to_edit_item_discount ||
@@ -378,10 +400,12 @@
 												// Lock the discount so it's not overwritten by pricing rules
 												item._manual_discount_lock = !!numVal;
 												
-												// Recalculate rate immediately
+												// Recalculate rate and percentage immediately
 												if (item.price_list_rate && item.price_list_rate > 0) {
 													item.rate = Math.max(0, item.price_list_rate - numVal);
 													item.discount_percentage = (numVal / item.price_list_rate) * 100;
+													// Clear the display variable so the calculated percentage shows
+													item._discount_percentage_display = undefined;
 												}
 												
 												// Update amount
