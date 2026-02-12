@@ -942,7 +942,7 @@ def _get_scale_barcode_settings():
 def _extract_numeric_segment(barcode: str, start: int, length: int, decimals: int = 0):
     """Extract a numeric value from ``barcode`` using 1-indexed ``start`` and ``length``."""
 
-    if not (start and length):
+    if not start or (cint(length) <= 0 and cint(decimals) <= 0):
         return None
 
     start_index = max(start - 1, 0)
