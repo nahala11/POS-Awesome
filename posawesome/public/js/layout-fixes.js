@@ -4,7 +4,7 @@
 console.log('POS Awesome: Layout fixes script loaded');
 
 // Function to apply layout fixes
-var applyLayoutFixes = function() {
+var applyLayoutFixes = function () {
 	// Fix main POS container
 	var posContainer = document.querySelector('.pos-main-container');
 	if (posContainer) {
@@ -27,12 +27,20 @@ var applyLayoutFixes = function() {
 		mainRow.style.margin = '0';
 	}
 
-	// Fix dynamic columns
-	var cols = document.querySelectorAll('.dynamic-col');
-	for (var i = 0; i < cols.length; i++) {
-		cols[i].style.overflow = 'hidden';
-		cols[i].style.padding = '0';
-	}
+	// Fix dynamic columns with specific widths (left 33%, right 67%)
+var cols = document.querySelectorAll('.dynamic-col');
+for (var i = 0; i < cols.length; i++) {
+    cols[i].style.overflow = 'hidden';
+    cols[i].style.padding = '0';
+    if (i === 0) {
+        cols[i].style.flex = '0 0 33.333%';
+        cols[i].style.maxWidth = '33.333%';
+    }
+    if (i === 1) {
+        cols[i].style.flex = '0 0 66.666%';
+        cols[i].style.maxWidth = '66.666%';
+    }
+}
 
 	// Fix items group panel (sidebar)
 	var itemsPanel = document.querySelector('.items-group-panel');
@@ -90,13 +98,13 @@ var applyLayoutFixes = function() {
 
 // Apply fixes with reduced frequency to prevent performance issues
 var isFixing = false;
-var applyLayoutFixesSafe = function() {
+var applyLayoutFixesSafe = function () {
 	if (isFixing) return;
 	isFixing = true;
 	try {
 		applyLayoutFixes();
 	} finally {
-		setTimeout(function() {
+		setTimeout(function () {
 			isFixing = false;
 		}, 100);
 	}
